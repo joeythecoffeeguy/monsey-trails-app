@@ -1,5 +1,53 @@
 # Android internal-test release
 
+## Appcircle (phone-friendly build and signing)
+
+The owner has connected the public GitHub repository to an **Android / React
+Native** build profile in Appcircle. Appcircle can generate and retain the
+new upload keystore through its browser dashboard, without a local computer.
+It still needs a workflow setup before the first build. Do not start a build
+from the default workflow unchanged: the native Android project is generated
+from Expo at build time and the repository uses pnpm at its root.
+
+1. In the Appcircle profile's **Default Configuration → Config**, set Node.js
+   to `22`, Modules to `app`, Project Location to
+   `artifacts/passenger-companion/android`, Variant to `release`, and Output
+   Type to `AAB`. Save it. Select the new upload keystore under **Signing**.
+   Before using it, compare its **upload certificate** to the Play Console
+   certificate for the existing app; a different certificate requires an
+   approved upload-key reset, not a new Play app.
+2. In the profile's **Workflows**, edit the Android release workflow. Keep
+   **Git Clone** and **Install Node**. Disable the default **NPM/Yarn Commands**
+   install step; npm/yarn are not valid installers for this pnpm workspace.
+   Add a **Custom Script** step with **Execute With: Bash** after Install Node
+   and before **Android Build**:
+
+   ```sh
+   bash "$AC_REPOSITORY_DIR/artifacts/passenger-companion/scripts/appcircle_prepare.sh"
+   ```
+
+   This installs pnpm 10.26.1, installs the workspace from the repository
+   root, generates the Expo Android project, and removes Expo's default debug
+   signing from the release build. Keep **Android Sign** *after* Android Build
+   and **Export Build Artifacts** *after* Android Sign. Only the Appcircle
+   signing step should sign the release.
+3. In Appcircle's **Environment Variables**, set
+   `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` to the production Clerk **publishable**
+   key and select that variable group for this build configuration. If
+   production Clerk uses a proxy, set `EXPO_PUBLIC_CLERK_PROXY_URL` too.
+   Never put the Clerk secret key in a mobile build. The preparation script
+   embeds `coach-passenger-display.replit.app` as the public API domain.
+4. Confirm `android.versionCode` in `app.json` exceeds every version already
+   uploaded to the existing Play app. Run the `main` branch. Download the
+   **signed AAB** artifact (not the unsigned intermediate bundle), verify its
+   package `com.monseytrails.passenger`, version code, and upload certificate
+   fingerprint, then upload it to the **existing** internal-testing track as
+   described below. Save a secure backup of the upload keystore and passwords
+   if Appcircle permits exporting them; do not lose access to the Appcircle
+   signing identity. Do not share key material in chat or public source.
+
+## GitHub Actions alternative (requires repository workflow permission)
+
 The Android bundle is built by the manual **Android internal-test bundle**
 workflow in GitHub Actions, not by Replit Expo Launch or the existing Expo
 project (which the owner cannot administer). The workflow uses pnpm at the
