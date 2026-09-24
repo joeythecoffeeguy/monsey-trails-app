@@ -29,11 +29,12 @@ from Expo at build time and the repository uses pnpm at its root.
    bash "$AC_REPOSITORY_DIR/artifacts/passenger-companion/scripts/appcircle_prepare.sh"
    ```
 
-   This installs pnpm 10.26.1, installs the workspace from the repository
-   root, generates the Expo Android project, and removes Expo's default debug
-   signing from the release build. Keep **Android Sign** *after* Android Build
-   and **Export Build Artifacts** *after* Android Sign. Only the Appcircle
-   signing step should sign the release.
+   This installs pnpm 10.26.1 in a temporary runner directory (Appcircle's
+   macOS pool does not allow Corepack to link into `/usr/local/bin`), installs
+   the workspace from the repository root, generates the Expo Android project,
+   and removes Expo's default debug signing from the release build. Keep
+   **Android Sign** *after* Android Build and **Export Build Artifacts** *after*
+   Android Sign. Only the Appcircle signing step should sign the release.
 3. In Appcircle's **Environment Variables**, set
    `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` to the production Clerk **publishable**
    key and select that variable group for this build configuration. If
