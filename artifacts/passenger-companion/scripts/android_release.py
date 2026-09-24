@@ -135,5 +135,15 @@ if __name__ == "__main__":
     try:
         {"check": check_credentials, "prepare": prepare, "prepare-unsigned": prepare_unsigned,
          "verify": verify}[sys.argv[1]]()
-    except (ValueError, OSError, subprocess.CalledProcessError) as exc:
-        raise SystemExit(f"Android release failed: {exc}") from None
+    except ValueError as exc:
+        # Actions annotations are readable even when job logs are unavailable.
+        message = str(exc).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+        print(f"::error title=Android release configuration::{message}", flush=True)
+        raise SystemExit(1) from None
+    except OSError:
+        print("::error title=Android release configuration::Could not read or write a release file", flush=True)
+        raise SystemExit(1) from None
+    except subprocess.CalledProcessError:
+        # A subprocess command may contain passwords; never echo its arguments.
+        print("::error title=Android release verification::Signing verification command failed", flush=True)
+        raise SystemExit(1) from None
