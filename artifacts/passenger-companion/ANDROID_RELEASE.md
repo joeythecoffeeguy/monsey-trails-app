@@ -11,12 +11,15 @@ uploads the `.aab` as a workflow artifact. It does **not** submit to Play.
 
 First open the staged
 [`android-internal.yml`](https://github.com/joeythecoffeeguy/monsey-trails-app/blob/main/android-internal.yml)
-on GitHub. Click **Edit** (pencil), replace the filename at the top with
-`.github/workflows/android-internal.yml`, and **Commit changes** to `main`.
-GitHub will move it into the Actions folder; the root-level staging file
-should disappear. The connected GitHub API refuses writes to that special
-folder, so this one move requires your GitHub access. The workflow contains
-no keys. Its signing helper is already in the public repository.
+on GitHub and click **Raw**, then copy the whole file. Open
+[GitHub's new-file page with the destination filename filled in](https://github.com/joeythecoffeeguy/monsey-trails-app/new/main?filename=.github%2Fworkflows%2Fandroid-internal.yml),
+confirm the **filename field above the code** says
+`.github/workflows/android-internal.yml`, paste the file into the **code
+editor**, and commit directly to `main`. The first line of the code must be
+`name: Android internal-test bundle`. The connected GitHub API cannot write
+to `.github/workflows`, so this one action requires your GitHub web login.
+The staged root-level file can be removed after the workflow appears in
+the repository's **Actions** tab. The workflow contains no keys.
 
 Then open the repository's **Settings → Secrets and variables → Actions**.
 Set these repository **secrets**:
