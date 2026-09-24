@@ -26,15 +26,40 @@ Set these repository **secrets**:
 | `ANDROID_UPLOAD_KEY_ALIAS` | Alias of the upload key inside the keystore |
 | `ANDROID_UPLOAD_KEY_PASSWORD` | Password for that key |
 
-The keystore must match the **upload certificate already registered for the
-existing Play Console app**. If the Play app has no registered upload
-certificate yet, generate and retain an upload key through a trusted local
-tool, then register its certificate as Play Console directs. If Play has a
-different upload certificate, arrange a Play Console upload-key reset before
-trying to upload a bundle signed with a new key. Keep a secure backup of the
-keystore and passwords. Never commit them, paste them into chat, or store them
-in GitHub variables. The workflow decodes the keystore into the temporary
-runner directory; the key and passwords are not included in build artifacts.
+The owner needs a **new upload key**. Generate it on a computer you control
+(not in this public repository), for example with Android Studio's **Build →
+Generate Signed Bundle/APK → Create new** wizard or a local Java installation:
+
+```sh
+keytool -genkeypair -keystore monsey-trails-upload.jks \
+  -alias monsey-trails-upload -keyalg RSA -keysize 4096 -validity 10000
+keytool -exportcert -rfc -keystore monsey-trails-upload.jks \
+  -alias monsey-trails-upload -file upload_certificate.pem
+```
+
+Choose strong passwords when prompted and store the `.jks` plus passwords
+in a secure backup. To encode the keystore for the GitHub secret, run
+`base64 < monsey-trails-upload.jks | tr -d '\n'` locally and paste the
+output **only into** the `ANDROID_UPLOAD_KEYSTORE_BASE64` GitHub secret.
+Set `ANDROID_UPLOAD_KEY_ALIAS` to `monsey-trails-upload` and the two
+password secrets to the values you chose (for a PKCS12 keystore, the key
+password is normally the same as the store password). Do not paste the encoded keystore,
+passwords, or private key into chat, source, a GitHub variable, or a public
+issue. The workflow decodes it into a temporary runner directory; no key or
+password is uploaded as a build artifact.
+
+Before uploading the bundle, check the existing app's **upload key
+certificate** in Play Console (do not confuse it with the *app signing key
+certificate*). If it already shows a different upload certificate, request
+an **upload-key reset** in **Protected with Play → Play Store protection →
+Manage Play app signing → Upload key certificate** and upload only
+`upload_certificate.pem` when prompted. Wait for Google to approve the new
+upload certificate. If this app has never registered an upload key, follow
+the Play Console's first-release signing instructions. Do not attempt a
+release using a certificate that Play still rejects.
+
+Google's instructions:
+https://support.google.com/googleplay/android-developer/answer/9842756
 
 Set the repository **variable** `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` to the
 production Clerk *publishable* key used by this app. If production Clerk uses
