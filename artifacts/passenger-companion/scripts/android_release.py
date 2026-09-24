@@ -91,14 +91,32 @@ def prepare_unsigned() -> None:
     print("Unsigned release configured for Appcircle Android Sign")
 
 
+def verify_generated_identity(app: dict, expected_id: str) -> None:
+    if app["package"] != expected_id:
+        raise ValueError("Unexpected application ID in app.json")
+    metadata_file = OUTPUT / "output-metadata.json"
+    if metadata_file.is_file():
+        metadata = json.loads(metadata_file.read_text())
+        if metadata["applicationId"] != expected_id:
+            raise ValueError("Unexpected application ID in bundle metadata")
+        if metadata["elements"][0]["versionCode"] != app["versionCode"]:
+            raise ValueError("Unexpected Android version code in bundle metadata")
+        return
+
+    # The Android Gradle Plugin can build an AAB without emitting the APK-style
+    # output-metadata.json. Check the generated release configuration instead.
+    source = GRADLE.read_text()
+    application_ids = re.findall(r"""(?m)^\s*applicationId\s+['"]([^'"]+)['"]\s*$""", source)
+    version_codes = re.findall(r"(?m)^\s*versionCode\s+(\d+)\s*$", source)
+    if application_ids != [expected_id] or version_codes != [str(app["versionCode"])]:
+        raise ValueError("Generated Android application ID or version code does not match app.json")
+    print("Bundle metadata absent; checked generated Android application ID and version code")
+
+
 def verify() -> None:
     app = json.loads((APP / "app.json").read_text())["expo"]["android"]
     expected_id = "com.monseytrails.passenger"
-    metadata = json.loads((OUTPUT / "output-metadata.json").read_text())
-    if app["package"] != expected_id or metadata["applicationId"] != expected_id:
-        raise ValueError("Unexpected application ID")
-    if metadata["elements"][0]["versionCode"] != app["versionCode"]:
-        raise ValueError("Unexpected Android version code")
+    verify_generated_identity(app, expected_id)
     bundles = list(OUTPUT.glob("*.aab"))
     if len(bundles) != 1:
         raise ValueError(f"Expected one app bundle, found {len(bundles)}")
@@ -139,6 +157,17 @@ if __name__ == "__main__":
         # Actions annotations are readable even when job logs are unavailable.
         message = str(exc).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
         print(f"::error title=Android release configuration::{message}", flush=True)
+        raise SystemExit(1) from None
+    except FileNotFoundError as exc:
+        # Only report known filenames; never expose a keystore path or arguments.
+        filename = Path(exc.filename or "").name
+        if filename in {"app.json", "build.gradle", "output-metadata.json"}:
+            detail = f"Missing release file: {filename}"
+        elif filename in {"jarsigner", "keytool"}:
+            detail = "Java signing verification tool is unavailable"
+        else:
+            detail = "Could not read a release file"
+        print(f"::error title=Android release configuration::{detail}", flush=True)
         raise SystemExit(1) from None
     except OSError:
         print("::error title=Android release configuration::Could not read or write a release file", flush=True)
