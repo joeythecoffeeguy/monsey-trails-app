@@ -10,7 +10,16 @@
       }
     },
     "production": {
-      "distribution": "store"
+      "distribution": "store",
+      "environment": "production",
+      "env": {
+        "EXPO_PUBLIC_DOMAIN": "coach-passenger-display.replit.app"
+      },
+      "android": {
+        "image": "latest",
+        "buildType": "app-bundle",
+        "credentialsSource": "remote"
+      }
     }
   }
 }
