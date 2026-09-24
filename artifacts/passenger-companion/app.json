@@ -13,7 +13,8 @@
       "buildNumber": "2"
     },
     "android": {
-      "package": "com.monseytrails.passenger"
+      "package": "com.monseytrails.passenger",
+      "versionCode": 1
     },
     "web": {
       "favicon": "./assets/images/favicon.png"
