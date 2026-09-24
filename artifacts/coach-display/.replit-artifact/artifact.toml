@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/passengers"
+title = "Coach Passenger Display"
+description = "A polished browser-based passenger information system for coach infotainment screens, featuring live-style route progress, next-stop arrivals, weather, traffic, announcements, onboard connectivity, safety messaging, automatic view cycling, and an operator configuration area backed by realistic mock providers."
+version = "1.0.0"
+id = "artifacts/coach-display"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 18140
+
+[services.development]
+run = "pnpm --filter @workspace/coach-display run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/coach-display", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/coach-display/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18140"
+BASE_PATH = "/"

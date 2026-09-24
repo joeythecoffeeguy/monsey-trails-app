@@ -1,0 +1,59 @@
+{
+  "expo": {
+    "name": "Monsey Trails Passenger",
+    "slug": "monsey-trails-passenger-v2",
+    "version": "2.0.5",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "monsey-trails-passenger",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "app.replit.monseytrailspassenger",
+      "buildNumber": "2"
+    },
+    "android": {
+      "package": "com.monseytrails.passenger"
+    },
+    "web": {
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-notifications",
+      [
+        "@clerk/expo",
+        {
+          "appleSignIn": false
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#F5F7F9",
+          "image": "./assets/images/monsey-trails-logo.png",
+          "imageWidth": 280,
+          "dark": {
+            "image": "./assets/images/monsey-trails-logo.png",
+            "backgroundColor": "#F5F7F9"
+          }
+        }
+      ],
+      [
+        "expo-widgets",
+        {
+          "enablePushNotifications": true
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "249047df-e370-4d36-b457-28ffcf5b6c8e"
+      }
+    },
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}

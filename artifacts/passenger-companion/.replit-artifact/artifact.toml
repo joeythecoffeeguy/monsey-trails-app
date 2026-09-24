@@ -1,0 +1,24 @@
+kind = "mobile"
+previewPath = "/passenger-companion/"
+title = "Monsey Trails Passenger"
+description = "A native companion for Monsey Trails passengers that pairs with an active coach, follows the live trip in English, Yiddish, or Hebrew, and delivers reliable approach alerts for a selected stop while the phone is locked or the app is backgrounded."
+version = "1.0.0"
+id = "artifacts/passenger-companion"
+router = "expo-domain"
+
+[[services]]
+name = "expo"
+ensurePreviewReachable = "/status"
+paths = [ "/passenger-companion/" ]
+localPort = 25840
+
+[services.development]
+run = "pnpm --filter @workspace/passenger-companion run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/passenger-companion", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/passenger-companion", "run", "serve" ]
+
+[services.env]
+PORT = "25840"
+BASE_PATH = "/passenger-companion/"

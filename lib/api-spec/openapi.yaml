@@ -1,0 +1,2032 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: passenger
+    description: Passenger pairing and stop alerts
+  - name: admin
+    description: Administrator-only driver access management
+components:
+  securitySchemes:
+    clerkSession:
+      type: apiKey
+      in: cookie
+      name: __session
+  schemas:
+    PassengerInfoCard:
+      type: object
+      required: [title, text]
+      properties:
+        title: { type: string }
+        text: { type: string }
+    PassengerInfoSections:
+      type: object
+      required: [destinations, fares, guide, contact]
+      properties:
+        destinations: { type: array, items: { $ref: '#/components/schemas/PassengerInfoCard' } }
+        fares: { type: array, items: { $ref: '#/components/schemas/PassengerInfoCard' } }
+        guide: { type: array, items: { $ref: '#/components/schemas/PassengerInfoCard' } }
+        contact: { type: array, items: { $ref: '#/components/schemas/PassengerInfoCard' } }
+    PassengerInfoResponse:
+      type: object
+      required: [content, reviewedAt, checkedAt, stale, ageDays, changesDetected, sourceUrls, canManage]
+      properties:
+        content:
+          type: object
+          required: [en, yi, he]
+          properties:
+            en: { $ref: '#/components/schemas/PassengerInfoSections' }
+            yi: { $ref: '#/components/schemas/PassengerInfoSections' }
+            he: { $ref: '#/components/schemas/PassengerInfoSections' }
+        reviewedAt: { type: string, format: date-time }
+        checkedAt: { type: [string, 'null'], format: date-time }
+        stale: { type: boolean }
+        ageDays: { type: number }
+        changesDetected: { type: boolean }
+        sourceUrls: { type: array, items: { type: string } }
+        canManage: { type: boolean }
+    PassengerAnnouncement:
+      type: object
+      required: [id, title, message, active]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        message: { type: string }
+        active: { type: boolean }
+    DriverProfileInput:
+      type: object
+      required: [unitNumber, phoneNumber]
+      properties:
+        unitNumber: { type: string, minLength: 1, maxLength: 20 }
+        phoneNumber: { type: string, minLength: 8, maxLength: 40 }
+    DriverProfile:
+      type: object
+      required: [username, unitNumber, phoneNumber]
+      properties:
+        username: { type: string }
+        unitNumber: { type: string }
+        phoneNumber: { type: string, description: Normalized phone number. This does not assert phone verification. }
+    DriverProfileResponse:
+      type: object
+      required: [profile]
+      properties:
+        profile:
+          oneOf:
+            - $ref: '#/components/schemas/DriverProfile'
+            - type: 'null'
+    DriverScheduledTrip:
+      type: object
+      required: [busNumber, officialRunKey, serviceDate, direction, status, scheduledDepartureAt, destinationAddress, stopCount, assignmentSource, displayKeys, keyLegend, scheduleKeysAvailable]
+      properties:
+        busNumber: { type: string }
+        officialRunKey: { type: string }
+        serviceDate: { type: string }
+        direction: { type: string }
+        status:
+          type: string
+          enum: [ready, running]
+        scheduledDepartureAt: { type: string, format: date-time }
+        destinationAddress: { type: string }
+        stopCount: { type: integer, minimum: 0 }
+        assignmentSource:
+          type: string
+          enum: [dispatch, driver]
+        displayKeys:
+          type: array
+          description: Current rider-facing PDF legend keys for this published run, kept separate from its persisted operational route.
+          items: { type: string, enum: [B, G, H, M, P, Q, R, X] }
+        keyLegend:
+          type: array
+          description: Current meanings returned by the centralized official schedule source.
+          items:
+            type: object
+            required: [key, meaning]
+            properties:
+              key: { type: string, enum: [B, G, H, M, P, Q, R, X] }
+              meaning: { type: string }
+        scheduleKeysAvailable:
+          type: boolean
+          description: False when the current official schedule could not be read or no longer contains this run; the persisted trip remains unchanged.
+    DriverScheduledTripList:
+      type: array
+      items: { $ref: '#/components/schemas/DriverScheduledTrip' }
+    AdminDriver:
+      type: object
+      required: [id, username, displayName, firstName, lastName, unitNumber, disabled]
+      properties:
+        id: { type: string }
+        username: { type: string }
+        displayName:
+          type: [string, 'null']
+          description: Existing saved profile name when available, otherwise the existing Clerk name or legacy Clerk metadata name.
+        firstName: { type: [string, 'null'] }
+        lastName: { type: [string, 'null'] }
+        unitNumber:
+          type: [string, 'null']
+          description: Driver profile unit number. This is not a currently assigned bus or coach.
+        disabled: { type: boolean }
+    AdminDriverResponse:
+      type: object
+      required: [driver]
+      properties:
+        driver: { $ref: '#/components/schemas/AdminDriver' }
+    AdminDriverListResponse:
+      type: object
+      required: [drivers, nextOffset]
+      properties:
+        drivers:
+          type: array
+          items: { $ref: '#/components/schemas/AdminDriver' }
+        nextOffset:
+          oneOf:
+            - { type: integer, minimum: 0 }
+            - { type: 'null' }
+    AdminRoleUser:
+      type: object
+      required: [id, username, displayName, role, restricted]
+      properties:
+        id: { type: string }
+        username: { type: [string, 'null'] }
+        displayName: { type: string }
+        role: { type: string, enum: [admin, dispatcher, content] }
+        restricted: { type: boolean }
+    AdminHistoryAction:
+      type: object
+      required: [id, actorSubject, actorRole, capability, action, targetType, targetId, before, after, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        actorSubject: { type: string }
+        actorRole: { type: string, enum: [admin, dispatcher, content] }
+        capability: { type: string, enum: [access, dispatch, content, identity, roles, history] }
+        action: { type: string }
+        targetType: { type: [string, 'null'] }
+        targetId: { type: [string, 'null'] }
+        before: { type: [object, 'null'], additionalProperties: true }
+        after: { type: [object, 'null'], additionalProperties: true }
+        createdAt: { type: string, format: date-time }
+    UpdateAdminRoleInput:
+      type: object
+      required: [role]
+      properties:
+        role: { type: string, enum: [admin, dispatcher, content] }
+    AdminAccessError:
+      type: object
+      required: [error, code]
+      properties:
+        error: { type: string }
+        code:
+          type: string
+          enum:
+            - AUTH_REQUIRED
+            - ADMIN_SESSION_INVALID
+            - ACCOUNT_RESTRICTED
+            - ADMIN_ACCESS_REQUIRED
+            - ADMIN_CAPABILITY_REQUIRED
+            - ADMIN_POLICY_REQUIRED
+            - UNTRUSTED_ORIGIN
+            - ADMIN_ACCESS_UNAVAILABLE
+    CreateAdminDriverInput:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        firstName: { type: string, minLength: 1, maxLength: 256 }
+        lastName: { type: string, minLength: 1, maxLength: 256 }
+        username:
+          type: string
+          minLength: 3
+          maxLength: 32
+          pattern: '^[A-Za-z0-9_.-]+$'
+        password: { type: string, minLength: 8, maxLength: 256 }
+        email: { type: string, format: email, maxLength: 254 }
+    ResetAdminDriverAccessInput:
+      type: object
+      additionalProperties: false
+      required: [password]
+      properties:
+        password: { type: string, minLength: 8, maxLength: 256 }
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+    PassengerPairRequest:
+      type: object
+      required: [passengerCode]
+      properties:
+        passengerCode: { type: string, pattern: '^[0-9]{4}$' }
+    PassengerSnapshotRequest:
+      type: object
+      required: [passengerCode]
+      properties:
+        passengerCode: { type: string, pattern: '^[0-9]{4}$' }
+    PassengerAlertUpsertRequest:
+      type: object
+      required: [passengerCode, deviceId, expoPushToken, selectedStopId, leadTime]
+      properties:
+        passengerCode: { type: string, pattern: '^[0-9]{4}$' }
+        deviceId: { type: string, maxLength: 160 }
+        expoPushToken: { type: string, maxLength: 255 }
+        selectedStopId: { type: string, maxLength: 80 }
+        leadTime: { type: string, enum: [time-15m, time-5m, time-2m, arriving-now, distance-0.5mi] }
+        soundEnabled: { type: boolean, default: true, description: Play the provider's default notification sound when delivered. }
+    PassengerAlertDeleteRequest:
+      type: object
+      required: [passengerCode, deviceId]
+      properties:
+        passengerCode: { type: string, pattern: '^[0-9]{4}$' }
+        deviceId: { type: string, maxLength: 160 }
+    PassengerRealtimeSubscriptionInput:
+      type: object
+      additionalProperties: false
+      required: [flow, passengerCode, deviceId, expoPushToken, runKey]
+      properties:
+        flow:
+          type: string
+          enum: [disruption, approaching-pickup, transfer-risk]
+          description: Opt-in event type. Disruptions target this exact active run; approaching-pickup requires selectedStopId; transfer-risk requires the exact onward run and verified transfer stop.
+        passengerCode: { type: string, pattern: '^[0-9]{4}$' }
+        deviceId: { type: string, minLength: 1, maxLength: 160 }
+        expoPushToken: { type: string, maxLength: 255 }
+        soundEnabled: { type: boolean, default: true }
+        runKey:
+          type: string
+          minLength: 1
+          maxLength: 180
+          description: Exact published incoming or active run key paired to this passenger code.
+        selectedStopId:
+          type: string
+          maxLength: 100
+          description: Required for approaching-pickup (official pickup ID) and transfer-risk (verified shared incoming stop ID).
+        onwardRunKey:
+          type: string
+          maxLength: 180
+          description: Required only for transfer-risk; exact selected published onward run key.
+        transferAreaId:
+          type: integer
+          minimum: 1
+          description: Required only for transfer-risk and must equal the incoming run destination area.
+        minimumBufferMinutes:
+          type: integer
+          minimum: 5
+          maximum: 120
+          description: Required only for transfer-risk; the passenger-selected minimum connection buffer.
+    PassengerRealtimeSubscription:
+      type: object
+      required: [id, flow, deviceId, officialRunKey, selectedStopId, onwardRunKey, transferAreaId, minimumBufferMinutes, active, lastConnectionStatus, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        flow: { type: string, enum: [disruption, approaching-pickup, transfer-risk] }
+        deviceId: { type: string }
+        officialRunKey: { type: string }
+        selectedStopId: { type: [string, 'null'] }
+        onwardRunKey: { type: [string, 'null'] }
+        transferAreaId: { type: [integer, 'null'] }
+        minimumBufferMinutes: { type: [integer, 'null'] }
+        active: { type: boolean }
+        lastConnectionStatus:
+          oneOf:
+            - { type: string, enum: [possible, tight, at_risk] }
+            - { type: 'null' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    PassengerRealtimeSubscriptionResponse:
+      type: object
+      required: [subscription]
+      properties:
+        subscription: { $ref: '#/components/schemas/PassengerRealtimeSubscription' }
+    PassengerRealtimeSubscriptionListResponse:
+      type: object
+      required: [subscriptions]
+      properties:
+        subscriptions:
+          type: array
+          items: { $ref: '#/components/schemas/PassengerRealtimeSubscription' }
+    DepartureReminderDelivery:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [type, expoPushToken]
+          properties:
+            type: { type: string, const: expo }
+            expoPushToken: { type: string, maxLength: 255 }
+        - type: object
+          additionalProperties: false
+          required: [type, subscription]
+          properties:
+            type: { type: string, const: web }
+            subscription:
+              type: object
+              required: [endpoint, keys]
+              properties:
+                endpoint: { type: string, format: uri, maxLength: 2048 }
+                keys:
+                  type: object
+                  required: [p256dh, auth]
+                  properties:
+                    p256dh: { type: string }
+                    auth: { type: string }
+    DepartureReminderInput:
+      type: object
+      additionalProperties: false
+      required: [deviceId, kind, serviceDate, line, origin, destination, runId, delivery]
+      properties:
+        deviceId: { type: string, minLength: 1, maxLength: 160 }
+        kind: { type: string, enum: [once, weekly] }
+        serviceDate: { type: string, format: date, description: Selected trip date and earliest date for a weekly rule. }
+        line: { type: integer, minimum: 1, maximum: 3 }
+        origin: { type: integer, minimum: 1 }
+        destination: { type: integer, minimum: 1 }
+        runId: { type: string, minLength: 1, maxLength: 100 }
+        weekdays:
+          type: array
+          uniqueItems: true
+          description: ISO weekdays, Monday=1 through Sunday=7. Required for weekly reminders.
+          items: { type: integer, minimum: 1, maximum: 7 }
+        leadMinutes: { type: integer, minimum: 5, maximum: 120, default: 15 }
+        delivery: { $ref: '#/components/schemas/DepartureReminderDelivery' }
+    DepartureReminder:
+      type: object
+      required: [id, deviceId, kind, serviceDate, line, origin, destination, runId, weekdays, leadMinutes, deliveryType, state, nextOccurrenceAt, lastError, createdAt, updatedAt, policy]
+      properties:
+        id: { type: string, format: uuid }
+        deviceId: { type: string }
+        kind: { type: string, enum: [once, weekly] }
+        serviceDate: { type: [string, 'null'], format: date }
+        line: { type: integer }
+        origin: { type: integer }
+        destination: { type: integer }
+        runId: { type: string }
+        weekdays:
+          type: array
+          items: { type: integer, minimum: 1, maximum: 7 }
+        leadMinutes: { type: integer }
+        deliveryType: { type: string, enum: [expo, web] }
+        state: { type: string, enum: [active, sending, delivered, cancelled, error] }
+        nextOccurrenceAt: { type: [string, 'null'], format: date-time }
+        lastError: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        policy: { type: string }
+    DepartureReminderResponse:
+      type: object
+      required: [reminder]
+      properties:
+        reminder: { $ref: '#/components/schemas/DepartureReminder' }
+    DepartureReminderListResponse:
+      type: object
+      required: [reminders]
+      properties:
+        reminders:
+          type: array
+          items: { $ref: '#/components/schemas/DepartureReminder' }
+    PushPublicKeyResponse:
+      type: object
+      required: [publicKey]
+      properties:
+        publicKey: { type: string }
+    PassengerTripSnapshot:
+      type: object
+      required: [operatorPairingCode, passengerCode, language, active, status, currentLocation, upcomingStops, journeyProgress, eta, updatedAt, locationVisibility, scheduledDepartureAt, announcements]
+      properties:
+        locationVisibility: { type: string, enum: [before_departure, live, ended, unavailable] }
+        announcements:
+          type: array
+          items: { $ref: '#/components/schemas/PassengerAnnouncement' }
+        scheduledDepartureAt: { type: [string, 'null'], format: date-time }
+        locationUpdatedAt:
+          type: [string, 'null']
+          format: date-time
+          description: Time the currently visible GPS position was observed; null outside live privacy mode.
+        operatorPairingCode: { type: string }
+        passengerCode: { type: string }
+        language: { type: string, enum: [en, yi, he] }
+        active: { type: boolean }
+        status: { type: string }
+        currentLocation: { oneOf: [{ $ref: '#/components/schemas/Coordinates' }, { type: 'null' }] }
+        upcomingStops:
+          type: array
+          items: { $ref: '#/components/schemas/UpcomingStop' }
+        journeyProgress:
+          type: array
+          items: { $ref: '#/components/schemas/PassengerJourneyProgress' }
+        disruptions:
+          type: array
+          items: { $ref: '#/components/schemas/ServiceDisruption' }
+        eta: { type: [string, 'null'], format: date-time }
+        updatedAt: { type: string, format: date-time }
+    Coordinates:
+      type: object
+      required: [lat, lng]
+      properties:
+        lat: { type: number }
+        lng: { type: number }
+    UpcomingStop:
+      type: object
+      required: [id, label, eta]
+      properties:
+        id: { type: string }
+        label: { type: string }
+        eta: { type: [string, 'null'], format: date-time }
+    PassengerJourneyProgress:
+      type: object
+      required: [id, address, lat, lng, eta, status]
+      properties:
+        id: { type: string }
+        address: { type: string }
+        lat: { type: number }
+        lng: { type: number }
+        eta: { type: [string, 'null'], format: date-time }
+        status: { type: string, enum: [completed, current, upcoming, final] }
+        kind: { type: string, enum: [pickup, dropoff, destination], description: Official stop semantic used for completion wording; omitted on legacy data. }
+        completedAt: { type: [string, 'null'], format: date-time }
+    PassengerPairResponse:
+      type: object
+      required: [session, trip]
+      properties:
+        session:
+          type: object
+          required: [operatorPairingCode, passengerCode]
+          properties:
+            operatorPairingCode: { type: string }
+            passengerCode: { type: string }
+        trip: { $ref: '#/components/schemas/PassengerTripSnapshot' }
+    PassengerSnapshotResponse:
+      type: object
+      required: [trip]
+      properties:
+        trip: { $ref: '#/components/schemas/PassengerTripSnapshot' }
+    OfficialScheduleRun:
+      type: object
+      required: [id, routeCode, routeSymbol, secondarySymbol, direction, firstPickupTime, scheduledTime, arrivalTime, durationMinutes, pickupDescription, dropoffDescription, departureStatus, delayMinutes, displayKeys]
+      properties:
+        id: { type: string }
+        routeCode: { type: string }
+        routeSymbol: { type: string }
+        secondarySymbol: { type: string }
+        direction: { type: string }
+        firstPickupTime: { type: string }
+        scheduledTime: { type: string }
+        arrivalTime: { type: string }
+        durationMinutes: { type: number }
+        pickupDescription: { type: string }
+        dropoffDescription: { type: string }
+        displayKeys:
+          type: array
+          description: Rider-facing PDF legend keys. Kept separate from operational route symbols.
+          items: { type: string, enum: [B, G, H, M, P, Q, R, X] }
+        pickupNote:
+          type: string
+          description: Optional rider-relevant detail preserved from the official pickup narrative.
+        dropoffNote:
+          type: string
+          description: Optional rider-relevant detail preserved from the official dropoff narrative.
+        departureStatus:
+          type: string
+          enum: [awaiting_departure, on_time, delayed, live_estimate, unavailable, completed]
+          description: Public status derived from the exact assigned run. Ready and unassigned runs remain awaiting_departure; live_estimate means fresh tracking has no published arrival baseline; unavailable means an active run lacks fresh live tracking.
+        delayMinutes:
+          type: [integer, 'null']
+          description: Whole-minute delay against the published arrival baseline, only for fresh active tracking.
+        disruptions:
+          type: array
+          items: { $ref: '#/components/schemas/ServiceDisruption' }
+    OfficialSchedule:
+      type: object
+      required: [source, fetchedAt, date, origin, destination, keyLegend, runs]
+      properties:
+        source: { type: string }
+        fetchedAt: { type: string }
+        date: { type: string }
+        origin:
+          type: object
+          required: [id, name]
+          properties:
+            id: { type: number }
+            name: { type: string }
+        destination:
+          type: object
+          required: [id, name]
+          properties:
+            id: { type: number }
+            name: { type: string }
+        keyLegend:
+          type: array
+          description: Meanings for all rider-facing schedule keys.
+          items:
+            type: object
+            required: [key, meaning]
+            properties:
+              key: { type: string, enum: [B, G, H, M, P, Q, R, X] }
+              meaning: { type: string }
+        runs:
+          type: array
+          items: { $ref: '#/components/schemas/OfficialScheduleRun' }
+    PassengerJourneyRequest:
+      type: object
+      additionalProperties: false
+      required: [line, origin, destination, date, runId]
+      properties:
+        line: { type: number, enum: [1, 2, 3] }
+        origin: { type: integer, minimum: 1 }
+        destination: { type: integer, minimum: 1 }
+        date: { type: string, format: date }
+        runId: { type: string, minLength: 1, maxLength: 80 }
+    PassengerAccountJourneyStop:
+      type: object
+      additionalProperties: false
+      required: [id, label, kind, lat, lng]
+      properties:
+        id: { type: string, minLength: 1, maxLength: 100 }
+        label: { type: string, minLength: 1, maxLength: 160 }
+        kind: { type: string, enum: [pickup, dropoff] }
+        lat: { type: number, minimum: -90, maximum: 90 }
+        lng: { type: number, minimum: -180, maximum: 180 }
+    PassengerAccountJourneyInput:
+      type: object
+      additionalProperties: false
+      required: [line, origin, destination, label]
+      properties:
+        line: { type: integer, minimum: 1, maximum: 3 }
+        origin: { type: integer, minimum: 1 }
+        destination: { type: integer, minimum: 1 }
+        label: { type: string, minLength: 1, maxLength: 120, description: Trimmed journey name. }
+        pickup: { $ref: '#/components/schemas/PassengerAccountJourneyStop' }
+        dropoff: { $ref: '#/components/schemas/PassengerAccountJourneyStop' }
+    PassengerAccountJourney:
+      type: object
+      required: [id, line, origin, destination, label, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        line: { type: integer, minimum: 1, maximum: 3 }
+        origin: { type: integer, minimum: 1 }
+        destination: { type: integer, minimum: 1 }
+        label: { type: string }
+        pickup:
+          oneOf:
+            - { $ref: '#/components/schemas/PassengerAccountJourneyStop' }
+            - { type: 'null' }
+        dropoff:
+          oneOf:
+            - { $ref: '#/components/schemas/PassengerAccountJourneyStop' }
+            - { type: 'null' }
+        createdAt: { type: string, format: date-time }
+    PassengerAccountJourneysResponse:
+      type: object
+      required: [journeys]
+      properties:
+        journeys:
+          type: array
+          items: { $ref: '#/components/schemas/PassengerAccountJourney' }
+    PassengerAccountJourneyResponse:
+      type: object
+      required: [journey]
+      properties:
+        journey: { $ref: '#/components/schemas/PassengerAccountJourney' }
+    PassengerJourneyStop:
+      type: object
+      required: [id, label, mapLabel, lat, lng, kind, scheduledAt, estimatedArrivalAt]
+      properties:
+        id: { type: string }
+        label: { type: string }
+        note:
+          type: string
+          description: Optional official landmark, boarding-side, restriction, or timing detail.
+        mapLabel: { type: string }
+        lat: { type: number }
+        lng: { type: number }
+        kind: { type: string, enum: [pickup, dropoff] }
+        scheduledAt:
+          type: [string, 'null']
+          format: date-time
+          description: Published baseline for this stop, or null when the source publishes no stop-specific time.
+        estimatedArrivalAt:
+          type: [string, 'null']
+          format: date-time
+          description: Traffic estimate. Consumers may label live estimates up to two minutes late as on time and later estimates by rounded delay; without a published baseline, label this only as a live estimate.
+    PassengerJourney:
+      type: object
+      required: [runKey, originName, destinationName, serviceDate, scheduledDepartureAt, scheduledArrivalAt, stops, routeGeometry, trafficUpdatedAt, trafficStatus, message]
+      properties:
+        runKey: { type: string }
+        originName: { type: string }
+        destinationName: { type: string }
+        serviceDate: { type: string, format: date }
+        scheduledDepartureAt: { type: [string, 'null'], format: date-time }
+        scheduledArrivalAt: { type: [string, 'null'], format: date-time }
+        arrivalVerification:
+          type: string
+          enum: [verified, unverified, unavailable]
+          description: Whether the published arrival is coherent with the selected service date and departure. Unverified source dates are never corrected.
+        stops:
+          type: array
+          items: { $ref: '#/components/schemas/PassengerJourneyStop' }
+        disruptions:
+          type: array
+          items: { $ref: '#/components/schemas/ServiceDisruption' }
+        routeGeometry:
+          type: array
+          items: { $ref: '#/components/schemas/Coordinates' }
+        trafficUpdatedAt: { type: [string, 'null'], format: date-time }
+        trafficStatus: { type: string, enum: [live, forecast, stale, unavailable] }
+        message: { type: [string, 'null'] }
+    PassengerTransferRequest:
+      type: object
+      additionalProperties: false
+      required: [runKey]
+      properties:
+        runKey:
+          type: string
+          minLength: 1
+          maxLength: 180
+          description: Exact published run key selected by the passenger.
+        minimumBufferMinutes:
+          type: integer
+          minimum: 5
+          maximum: 120
+          default: 15
+    PassengerTransferOption:
+      type: object
+      required: [runKey, line, origin, destination, serviceDate, departureAt, arrivalBasisAt, arrivalBasis, bufferMinutes, sharedStop, connectionStatus, warning]
+      properties:
+        runKey: { type: string }
+        line: { type: integer, enum: [1, 2, 3] }
+        origin:
+          type: object
+          required: [id, name]
+          properties:
+            id: { type: integer }
+            name: { type: string }
+        destination:
+          type: object
+          required: [id, name]
+          properties:
+            id: { type: integer }
+            name: { type: string }
+        serviceDate: { type: string, format: date }
+        departureAt: { type: string, format: date-time }
+        arrivalBasisAt: { type: string, format: date-time }
+        arrivalBasis:
+          type: string
+          enum: [live, scheduled]
+          description: Whether the incoming arrival used a fresh live ETA or the published schedule.
+        bufferMinutes: { type: integer }
+        sharedStop:
+          type: object
+          required: [id, label, areaId]
+          properties:
+            id: { type: string }
+            label: { type: string }
+            areaId: { type: integer }
+        connectionStatus: { type: string, enum: [possible, tight, at_risk] }
+        warning: { type: string }
+    PassengerTransferSearchResponse:
+      type: object
+      required: [incomingRunKey, minimumBufferMinutes, searchedThrough, options, message]
+      properties:
+        incomingRunKey: { type: string }
+        minimumBufferMinutes: { type: integer }
+        searchedThrough: { type: string, format: date-time }
+        options:
+          type: array
+          items: { $ref: '#/components/schemas/PassengerTransferOption' }
+        message: { type: string }
+    PublicRunPassengerResponse:
+      type: object
+      required: [assigned, coachNumber, trip]
+      properties:
+        assigned: { type: boolean }
+        coachNumber: { type: [string, 'null'] }
+        trip:
+          oneOf:
+            - { $ref: '#/components/schemas/PassengerTripSnapshot' }
+            - { type: 'null' }
+    PassengerAlertResponse:
+      type: object
+      required: [alert]
+      properties:
+        alert:
+          type: object
+          required: [id, selectedStopId, leadTime, soundEnabled, state]
+          properties:
+            id: { type: string }
+            selectedStopId: { type: string }
+            leadTime: { type: string, enum: [time-15m, time-5m, time-2m, arriving-now, distance-0.5mi] }
+            soundEnabled: { type: boolean }
+            state: { type: string, enum: [pending, sending, delivered, expired] }
+    AdminScheduleStop:
+      type: object
+      required: [key, areaId, areaName, canonicalLabel, sourceLabel, address, lat, lng, category, manuallyOverridden, isCustom, listedOnOfficialSite, officialSiteNote, updatedAt]
+      properties:
+        key: { type: string }
+        areaId: { type: integer }
+        areaName: { type: string }
+        canonicalLabel: { type: string }
+        sourceLabel: { type: string }
+        address: { type: [string, 'null'] }
+        lat: { type: number }
+        lng: { type: number }
+        category: { type: string, enum: [pickup, dropoff, both] }
+        manuallyOverridden: { type: boolean }
+        isCustom: { type: boolean }
+        listedOnOfficialSite: { type: boolean }
+        officialSiteNote: { type: [string, 'null'] }
+        updatedAt: { type: [string, 'null'], format: date-time }
+    AdminScheduleStopInput:
+      type: object
+      required: [areaId, canonicalLabel, lat, lng, confirmedImpactRevision]
+      properties:
+        areaId: { type: integer, minimum: 1, maximum: 12 }
+        canonicalLabel: { type: string, minLength: 2, maxLength: 240 }
+        address: { type: [string, 'null'], maxLength: 320 }
+        lat: { type: number, minimum: -90, maximum: 90 }
+        lng: { type: number, minimum: -180, maximum: 180 }
+        category: { type: string, enum: [pickup, dropoff, both], default: both }
+        confirmedImpactRevision: { type: string, minLength: 64, maxLength: 64 }
+    AdminScheduleStopUpdate:
+      type: object
+      required: [confirmedImpactRevision]
+      properties:
+        address: { type: [string, 'null'], maxLength: 320 }
+        lat: { type: number, minimum: -90, maximum: 90 }
+        lng: { type: number, minimum: -180, maximum: 180 }
+        category: { type: string, enum: [pickup, dropoff, both] }
+        confirmedImpactRevision: { type: string, minLength: 64, maxLength: 64 }
+    AdminStopChangeImpactRequest:
+      type: object
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [create, update, delete] }
+        key: { type: string }
+        change: { type: object, additionalProperties: true }
+    AdminStopChangeImpact:
+      type: object
+      required: [revision, generatedAt, change, affectedAreas, routes, upcomingTrips, activeTrips, serverEvidence, evidenceNotes, mapWording]
+      properties:
+        revision: { type: string }
+        generatedAt: { type: string, format: date-time }
+        change: { type: object, additionalProperties: true }
+        affectedAreas: { type: array, items: { type: object, additionalProperties: true } }
+        routes: { type: array, items: { type: string } }
+        upcomingTrips: { type: array, items: { type: object, additionalProperties: true } }
+        activeTrips: { type: array, items: { type: object, additionalProperties: true } }
+        serverEvidence:
+          type: object
+          required: [activeTripAlerts, departureReminders, savedJourneys]
+          properties:
+            activeTripAlerts: { type: integer }
+            departureReminders: { type: integer }
+            savedJourneys: { type: ['integer', 'null'] }
+        evidenceNotes: { type: array, items: { type: string } }
+        mapWording: { type: string }
+    AdminAddressSearchResult:
+      type: object
+      required: [id, address, lat, lng, type, score]
+      properties:
+        id: { type: string }
+        address: { type: string }
+        lat: { type: number }
+        lng: { type: number }
+        type: { type: string }
+        score: { type: number }
+    AdminTripControl:
+      type: object
+      required: [busNumber, status, startedAt, locationVisibility]
+      properties:
+        busNumber: { type: string }
+        status: { type: string, enum: [running, stopped] }
+        startedAt: { type: [string, 'null'], format: date-time }
+        locationVisibility: { type: string, enum: [live, ended] }
+    AdminOperationsExceptionAction:
+      type: object
+      required: [label, href]
+      properties:
+        label: { type: string }
+        href: { type: string }
+    AdminOperationsException:
+      type: object
+      required: [id, type, severity, busNumber, driverName, direction, title, detail, scheduledDepartureAt, lastSeenAt, action]
+      properties:
+        id: { type: string }
+        type: { type: string, enum: [late_departure, missing_gps, stale_gps, disconnected_display, active_disruption] }
+        severity: { type: string, enum: [critical, warning, info] }
+        busNumber: { type: string }
+        driverName: { type: [string, 'null'] }
+        direction: { type: [string, 'null'] }
+        title: { type: string }
+        detail: { type: string }
+        scheduledDepartureAt: { type: [string, 'null'], format: date-time }
+        lastSeenAt: { type: [string, 'null'], format: date-time }
+        action: { $ref: '#/components/schemas/AdminOperationsExceptionAction' }
+    AdminOperationsExceptionSummary:
+      type: object
+      required: [total, critical, warning, lateDepartures, gps, disconnectedDisplays, activeDisruptions, activeTrips]
+      properties:
+        total: { type: integer, minimum: 0 }
+        critical: { type: integer, minimum: 0 }
+        warning: { type: integer, minimum: 0 }
+        lateDepartures: { type: integer, minimum: 0 }
+        gps: { type: integer, minimum: 0 }
+        disconnectedDisplays: { type: integer, minimum: 0 }
+        activeDisruptions: { type: integer, minimum: 0 }
+        activeTrips: { type: integer, minimum: 0 }
+    AdminOperationsThresholds:
+      type: object
+      required: [lateDepartureMinutes, criticalLateDepartureMinutes, staleGpsMinutes, criticalGpsMinutes]
+      properties:
+        lateDepartureMinutes: { type: integer, minimum: 1 }
+        criticalLateDepartureMinutes: { type: integer, minimum: 1 }
+        staleGpsMinutes: { type: integer, minimum: 1 }
+        criticalGpsMinutes: { type: integer, minimum: 1 }
+    AdminOperationsDisruptionIntegration:
+      type: object
+      required: [status, message]
+      properties:
+        status: { type: string, enum: [connected, unavailable] }
+        message: { type: string }
+    AdminOperationsExceptionsResponse:
+      type: object
+      required: [generatedAt, summary, thresholds, exceptions, disruptionIntegration]
+      properties:
+        generatedAt: { type: string, format: date-time }
+        summary: { $ref: '#/components/schemas/AdminOperationsExceptionSummary' }
+        thresholds: { $ref: '#/components/schemas/AdminOperationsThresholds' }
+        exceptions:
+          type: array
+          items: { $ref: '#/components/schemas/AdminOperationsException' }
+        disruptionIntegration: { $ref: '#/components/schemas/AdminOperationsDisruptionIntegration' }
+    ServiceDisruption:
+      type: object
+      required: [id, officialRunKey, type, message, delayMinutes, stopName, startsAt, expiresAt, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        officialRunKey: { type: string }
+        type: { type: string, enum: [delay, detour, skipped_stop, boarding_change, cancellation] }
+        message: { type: string }
+        delayMinutes: { type: [integer, 'null'] }
+        stopName: { type: [string, 'null'] }
+        targetCoachNumbers:
+          type: array
+          items: { type: string }
+        startsAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ServiceDisruptionInput:
+      type: object
+      additionalProperties: false
+      required: [officialRunKey, type, message, expiresAt]
+      properties:
+        officialRunKey: { type: string, minLength: 8, maxLength: 180 }
+        type: { type: string, enum: [delay, detour, skipped_stop, cancellation] }
+        message: { type: string, minLength: 1, maxLength: 500 }
+        delayMinutes: { type: [integer, 'null'], minimum: 1, maximum: 1440 }
+        stopName: { type: [string, 'null'], maxLength: 160 }
+        startsAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+    OperationalReport:
+      type: object
+      required: [id, assignmentId, busNumber, officialRunKey, category, location, locationObservedAt, createdAt, resolvedAt, resolution]
+      properties:
+        id: { type: string, format: uuid }
+        assignmentId: { type: integer }
+        busNumber: { type: string }
+        officialRunKey: { type: string }
+        category: { type: string, enum: [stop_blocked, heavy_traffic, coach_issue, passenger_assistance] }
+        location:
+          type: object
+          required: [lat, lng]
+          properties:
+            lat: { type: number }
+            lng: { type: number }
+        locationObservedAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+        resolvedAt: { type: [string, 'null'], format: date-time }
+        resolution: { type: [string, 'null'] }
+    DriverReportInput:
+      type: object
+      additionalProperties: false
+      required: [category]
+      properties:
+        category: { type: string, enum: [stop_blocked, heavy_traffic, coach_issue, passenger_assistance] }
+    OperationalReportResolution:
+      type: object
+      additionalProperties: false
+      required: [resolution]
+      properties:
+        resolution: { type: string, minLength: 1, maxLength: 240 }
+    DispatchInstruction:
+      type: object
+      required: [id, assignmentId, busNumber, officialRunKey, message, createdAt, deliveredAt, acknowledgedAt]
+      properties:
+        id: { type: string, format: uuid }
+        assignmentId: { type: integer }
+        busNumber: { type: string }
+        officialRunKey: { type: string }
+        message: { type: string }
+        createdAt: { type: string, format: date-time }
+        deliveredAt: { type: [string, 'null'], format: date-time }
+        acknowledgedAt: { type: [string, 'null'], format: date-time }
+    DispatchInstructionInput:
+      type: object
+      additionalProperties: false
+      required: [assignmentId, message]
+      properties:
+        assignmentId: { type: integer, minimum: 1 }
+        message: { type: string, minLength: 1, maxLength: 500 }
+    DriverCommunications:
+      type: object
+      required: [reports, instructions, safety]
+      properties:
+        reports:
+          type: array
+          items: { $ref: '#/components/schemas/OperationalReport' }
+        instructions:
+          type: array
+          items: { $ref: '#/components/schemas/DispatchInstruction' }
+        safety:
+          type: object
+          required: [stopped, reason]
+          properties:
+            stopped: { type: boolean }
+            reason: { type: string }
+    AdminCommunications:
+      type: object
+      required: [reports, instructions]
+      properties:
+        reports:
+          type: array
+          items: { $ref: '#/components/schemas/OperationalReport' }
+        instructions:
+          type: array
+          items: { $ref: '#/components/schemas/DispatchInstruction' }
+    PassengerLiveActivityAvailability:
+      type: object
+      additionalProperties: false
+      required: [available]
+      properties:
+        available: { type: boolean }
+    PassengerLiveActivityRegistration:
+      type: object
+      additionalProperties: false
+      required: [passengerCode, runKey, pickupStopId, dropoffStopId, clientActivityId]
+      properties:
+        passengerCode: { type: string, pattern: '^[0-9]{4}$' }
+        runKey: { type: string, minLength: 1, maxLength: 180 }
+        pickupStopId: { type: string, minLength: 1, maxLength: 100 }
+        dropoffStopId: { type: string, minLength: 1, maxLength: 100 }
+        clientActivityId: { type: string, minLength: 1, maxLength: 160 }
+        pushToken: { type: string, pattern: '^[A-Fa-f0-9]{64,200}$' }
+    PassengerLiveActivityTokenUpdate:
+      type: object
+      additionalProperties: false
+      required: [pushToken]
+      properties:
+        pushToken: { type: string, pattern: '^[A-Fa-f0-9]{64,200}$' }
+    PassengerLiveActivity:
+      type: object
+      additionalProperties: false
+      required: [id]
+      properties:
+        id: { type: string, format: uuid }
+    PassengerLiveActivityProps:
+      type: object
+      additionalProperties: false
+      required: [phase, lineName, stopName, etaLabel, coachNumber, status, updatedAt]
+      properties:
+        phase: { type: string, enum: [pickup, onboard, ended, unavailable] }
+        lineName: { type: string }
+        stopName: { type: string }
+        etaLabel: { type: string }
+        coachNumber: { type: string }
+        status: { type: string }
+        updatedAt: { type: string, format: date-time }
+paths:
+  /passenger/live-activities/availability:
+    get:
+      operationId: getPassengerLiveActivityAvailability
+      tags: [passenger]
+      responses:
+        '200':
+          description: Availability requires APNs credentials and the required iOS bundle ID
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PassengerLiveActivityAvailability' }
+  /passenger/live-activities:
+    post:
+      operationId: registerPassengerLiveActivity
+      tags: [passenger]
+      parameters:
+        - in: header
+          name: x-passenger-realtime-capability
+          required: true
+          schema: { type: string, minLength: 43, maxLength: 128, pattern: '^[A-Za-z0-9_-]+$' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PassengerLiveActivityRegistration' }
+      responses:
+        '201':
+          description: Registered activity identifier
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PassengerLiveActivity' }
+        '400': { description: Invalid body or installation capability }
+        '409':
+          description: Passenger pairing or stop selection is no longer valid
+  /passenger/live-activities/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string, format: uuid }
+      - in: header
+        name: x-passenger-realtime-capability
+        required: true
+        schema: { type: string, minLength: 43, maxLength: 128, pattern: '^[A-Za-z0-9_-]+$' }
+    patch:
+      operationId: updatePassengerLiveActivityToken
+      tags: [passenger]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PassengerLiveActivityTokenUpdate' }
+      responses:
+        '200':
+          description: Activity token updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PassengerLiveActivity' }
+        '400': { description: Invalid token or installation capability }
+        '404': { description: Activity not found for this installation }
+    delete:
+      operationId: endPassengerLiveActivity
+      tags: [passenger]
+      responses:
+        '204': { description: Activity ended }
+  /driver/communications:
+    get:
+      operationId: getDriverCommunications
+      tags: [driver]
+      security: [{ clerkSession: [] }]
+      responses:
+        '200':
+          description: Reports and dispatch instructions scoped to the signed-in driver's current assignment
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DriverCommunications' }
+        '403': { description: Driver access or current assignment required }
+  /driver/operational-reports:
+    post:
+      operationId: createDriverOperationalReport
+      tags: [driver]
+      security: [{ clerkSession: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DriverReportInput' }
+      responses:
+        '201':
+          description: Server-attributed operational report
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OperationalReport' }
+        '409': { description: Coach is not confirmed safely stopped }
+  /driver/dispatch-instructions/{id}/delivered:
+    post:
+      operationId: markDispatchInstructionDelivered
+      tags: [driver]
+      security: [{ clerkSession: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Delivery recorded after the driver client received the instruction
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DispatchInstruction' }
+        '404': { description: Instruction not found in this driver's assignment }
+  /driver/dispatch-instructions/{id}/acknowledge:
+    post:
+      operationId: acknowledgeDispatchInstruction
+      tags: [driver]
+      security: [{ clerkSession: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Explicit stopped-driver acknowledgment recorded
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DispatchInstruction' }
+        '409': { description: Coach is not confirmed safely stopped }
+  /admin/communications:
+    get:
+      operationId: getAdminCommunications
+      tags: [admin]
+      security: [{ clerkSession: [] }]
+      responses:
+        '200':
+          description: Operational reports and dispatch instruction delivery state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminCommunications' }
+  /admin/dispatch-instructions:
+    post:
+      operationId: createDispatchInstruction
+      tags: [admin]
+      security: [{ clerkSession: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DispatchInstructionInput' }
+      responses:
+        '201':
+          description: Persisted instruction scoped to an active assignment
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DispatchInstruction' }
+        '409': { description: Assignment is no longer active }
+  /admin/operational-reports/{id}/resolve:
+    post:
+      operationId: resolveOperationalReport
+      tags: [admin]
+      security: [{ clerkSession: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OperationalReportResolution' }
+      responses:
+        '200':
+          description: Resolved report
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OperationalReport' }
+  /admin/operations/exceptions:
+    get:
+      operationId: getAdminOperationsExceptions
+      tags: [admin]
+      security: [{ clerkSession: [] }]
+      responses:
+        '200':
+          description: Current operational exceptions derived from active dispatch assignments, live trips, and structured disruption notices
+          headers:
+            Cache-Control: { schema: { type: string }, description: Always no-store }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminOperationsExceptionsResponse' }
+        '401': { description: Sign-in required }
+        '403': { description: Administrator access required }
+  /admin/service-disruptions:
+    get:
+      operationId: listAdminServiceDisruptions
+      tags: [admin]
+      security: [{ clerkSession: [] }]
+      parameters:
+        - { name: runKey, in: query, required: false, schema: { type: string, maxLength: 180 } }
+      responses:
+        '200':
+          description: Current active trip disruptions
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/ServiceDisruption' } }
+        '401': { description: Sign-in required }
+        '403': { description: Administrator access required }
+    post:
+      operationId: createAdminServiceDisruption
+      tags: [admin]
+      security: [{ clerkSession: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ServiceDisruptionInput' }
+      responses:
+        '201':
+          description: Passenger-visible disruption created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceDisruption' }
+        '400': { description: Invalid disruption }
+        '401': { description: Sign-in required }
+        '403': { description: Administrator access required }
+  /admin/service-disruptions/{id}:
+    put:
+      operationId: updateAdminServiceDisruption
+      tags: [admin]
+      security: [{ clerkSession: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ServiceDisruptionInput' }
+      responses:
+        '200':
+          description: Disruption updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceDisruption' }
+        '400': { description: Invalid disruption }
+        '404': { description: Disruption not found }
+    delete:
+      operationId: clearAdminServiceDisruption
+      tags: [admin]
+      security: [{ clerkSession: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204': { description: Passenger visibility cleared while retaining the audit record }
+        '404': { description: Disruption not found }
+  /admin/schedule-stops:
+    get:
+      operationId: listAdminScheduleStops
+      tags: [admin]
+      security: [{ clerkSession: [] }]
+      responses:
+        '200':
+          description: All integrated audited schedule stops and effective coordinates
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/AdminScheduleStop' } }
+        '401': { description: Sign-in required }
+        '403': { description: Administrator access required }
+    post:
+      operationId: createAdminScheduleStop
+      tags: [admin]
+      security: [{ clerkSession: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminScheduleStopInput' }
+      responses:
+        '201':
+          description: Custom stop added to every trip serving its area
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminScheduleStop' }
+        '400': { description: Invalid stop details }
+        '401': { description: Sign-in required }
+        '403': { description: Administrator access required }
+        '409': { description: Duplicate stop }
+  /admin/schedule-stops/impact:
+    post:
+      operationId: previewAdminScheduleStopImpact
+      tags: [admin]
+      security: [{ clerkSession: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminStopChangeImpactRequest' }
+      responses:
+        '200':
+          description: Current server-evidenced effect of the proposed change
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminStopChangeImpact' }
+        '400': { description: Invalid proposed change }
+  /admin/scheduled-stop-changes:
+    get:
+      operationId: listAdminScheduledStopChanges
+      tags: [admin]
+      security: [{ clerkSession: [] }]
+      responses:
+        '200':
+          description: Durable queued changes, due identifiers, and explicit-apply policy
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+    post:
+      operationId: createAdminScheduledStopChange
+      tags: [admin]
+      security: [{ clerkSession: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind, change, applyAt, confirmedImpactRevision]
+              properties:
+                kind: { type: string, enum: [create, update, delete] }
+                key: { type: string }
+                change: { type: object, additionalProperties: true }
+                applyAt: { type: string, format: date-time }
+                confirmedImpactRevision: { type: string, minLength: 64, maxLength: 64 }
+      responses:
+        '201': { description: Change durably queued for explicit administrator application }
+        '409': { description: Impact confirmation is stale }
+  /admin/scheduled-stop-changes/{id}:
+    delete:
+      operationId: cancelAdminScheduledStopChange
+      tags: [admin]
+      security: [{ clerkSession: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204': { description: Queued change cancelled }
+        '404': { description: Queued change not found }
+  /admin/schedule-stops/{key}:
+    put:
+      operationId: updateAdminScheduleStop
+      tags: [admin]
+      security: [{ clerkSession: [] }]
+      parameters:
+        - { name: key, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminScheduleStopUpdate' }
+      responses:
+        '200':
+          description: Saved coordinate override
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminScheduleStop' }
+        '400': { description: Invalid coordinates }
+        '401': { description: Sign-in required }
+        '403': { description: Administrator access required }
+        '404': { description: Unknown integrated stop }
+    delete:
+      operationId: deleteAdminScheduleStop
+      tags: [admin]
+      security: [{ clerkSession: [] }]
+      parameters:
+        - { name: key, in: path, required: true, schema: { type: string } }
+        - { name: confirmedImpactRevision, in: query, required: true, schema: { type: string, minLength: 64, maxLength: 64 } }
+      responses:
+        '204': { description: Stop removed from system routes; official website synchronization remains active }
+        '401': { description: Sign-in required }
+        '403': { description: Administrator access required }
+        '404': { description: Stop not found }
+        '409': { description: A running coach is already on its final leg to this stop }
+  /admin/address-search:
+    get:
+      operationId: searchAdminAddresses
+      tags: [admin]
+      security: [{ clerkSession: [] }]
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string, minLength: 3, maxLength: 120 } }
+        - { name: areaId, in: query, required: false, schema: { type: integer, minimum: 1 } }
+      responses:
+        '200':
+          description: TomTom address search results
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/AdminAddressSearchResult' } }
+        '400': { description: Invalid query }
+        '401': { description: Sign-in required }
+        '403': { description: Administrator access required }
+        '502': { description: Search unavailable }
+  /admin/active-trips/{busNumber}/start:
+    post:
+      operationId: startAdminActiveTrip
+      tags: [admin]
+      security: [{ clerkSession: [] }]
+      parameters:
+        - { name: busNumber, in: path, required: true, schema: { type: string, pattern: '^[A-Z0-9]{1,6}$' } }
+      responses:
+        '200':
+          description: Assigned trip started; the driver client begins publishing GPS automatically
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminTripControl' }
+        '400': { description: Invalid coach number }
+        '401': { description: Sign-in required }
+        '403': { description: Administrator access required }
+        '409': { description: Coach has no ready assigned trip }
+  /admin/active-trips/{busNumber}/stop:
+    post:
+      operationId: stopAdminActiveTrip
+      tags: [admin]
+      security: [{ clerkSession: [] }]
+      parameters:
+        - { name: busNumber, in: path, required: true, schema: { type: string, pattern: '^[A-Z0-9]{1,6}$' } }
+      responses:
+        '200':
+          description: Trip stopped and all passenger-visible location data cleared
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminTripControl' }
+        '400': { description: Invalid coach number }
+        '401': { description: Sign-in required }
+        '403': { description: Administrator access required }
+        '409': { description: Coach has no running trip }
+  /admin/access:
+    get:
+      operationId: getAdminAccess
+      tags: [admin]
+      security: [{ clerkSession: [] }]
+      responses:
+        '200':
+          description: Confirms fresh administrator authorization
+          headers:
+            Cache-Control: { schema: { type: string }, description: Always no-store }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [authorized, role, capabilities]
+                properties:
+                  authorized: { type: boolean, const: true }
+                  role: { type: string, enum: [admin, dispatcher, content] }
+                  capabilities:
+                    type: array
+                    items: { type: string, enum: [dispatch, content, identity, roles, history] }
+        '401':
+          description: Sign-in required or administrator session invalid
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminAccessError' }
+        '403':
+          description: Account, role, or request-origin restriction
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminAccessError' }
+        '503':
+          description: Administrator access verification unavailable
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminAccessError' }
+  /admin/roles:
+    get:
+      operationId: listAdminRoleUsers
+      tags: [admin]
+      security: [{ clerkSession: [] }]
+      responses:
+        '200':
+          description: Accounts with administrator-tool roles
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [users]
+                properties:
+                  users:
+                    type: array
+                    items: { $ref: '#/components/schemas/AdminRoleUser' }
+        '401': { description: Sign-in required }
+        '403': { description: Full administrator role required }
+  /admin/roles/{id}:
+    patch:
+      operationId: updateAdminRole
+      tags: [admin]
+      security: [{ clerkSession: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateAdminRoleInput' }
+      responses:
+        '200':
+          description: Updated role; target sessions are revoked
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminRoleUser' }
+        '400': { description: Invalid role }
+        '401': { description: Sign-in required }
+        '403': { description: Full administrator role required }
+        '409': { description: The last unrestricted full administrator cannot be demoted }
+  /admin/history:
+    get:
+      operationId: listAdminHistory
+      tags: [admin]
+      security: [{ clerkSession: [] }]
+      parameters:
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        '200':
+          description: Recent safe administrator mutation history
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [health, actions]
+                properties:
+                  health:
+                    type: object
+                    required: [status, consecutiveFailures, lastFailureAt, lastSuccessAt]
+                    properties:
+                      status: { type: string, enum: [healthy, degraded, unknown] }
+                      consecutiveFailures: { type: integer, minimum: 0 }
+                      lastFailureAt: { type: [string, 'null'], format: date-time }
+                      lastSuccessAt: { type: [string, 'null'], format: date-time }
+                  actions:
+                    type: array
+                    items: { $ref: '#/components/schemas/AdminHistoryAction' }
+        '401': { description: Sign-in required }
+        '403': { description: Full administrator role required }
+  /admin/drivers:
+    get:
+      operationId: listAdminDrivers
+      tags: [admin]
+      security: [{ clerkSession: [] }]
+      parameters:
+        - name: offset
+          in: query
+          required: false
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        '200':
+          description: One page of provisioned driver accounts
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminDriverListResponse' }
+        '400': { description: Invalid offset }
+        '401': { description: Sign-in required }
+        '403': { description: Administrator access required }
+    post:
+      operationId: createAdminDriver
+      tags: [admin]
+      security: [{ clerkSession: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateAdminDriverInput' }
+      responses:
+        '201':
+          description: Driver account created in Clerk
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminDriverResponse' }
+        '400': { description: Invalid input or password }
+        '401': { description: Sign-in required }
+        '403': { description: Administrator access required }
+        '409': { description: Username or email already exists }
+        '422': { description: Clerk account configuration requires other information }
+  /admin/drivers/{id}:
+    delete:
+      operationId: deleteAdminDriver
+      tags: [admin]
+      security: [{ clerkSession: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '204': { description: Driver account and local driver state deleted }
+        '401': { description: Sign-in required }
+        '403': { description: Target is not a manageable driver }
+        '404': { description: Driver not found }
+        '502': { description: 'Clerk failure, including an explicitly reported partial deletion' }
+  /admin/drivers/{id}/disable:
+    post:
+      operationId: disableAdminDriver
+      tags: [admin]
+      security: [{ clerkSession: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Driver banned in Clerk; Clerk revokes the driver's sessions
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminDriverResponse' }
+        '401': { description: Sign-in required }
+        '403': { description: Target is not a manageable driver }
+        '404': { description: Driver not found }
+        '502': { description: 'Clerk failure, including an explicitly reported partial disable' }
+  /admin/drivers/{id}/enable:
+    post:
+      operationId: enableAdminDriver
+      tags: [admin]
+      security: [{ clerkSession: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Driver unbanned and unlocked without changing the password
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminDriverResponse' }
+        '401': { description: Sign-in required }
+        '403': { description: Target is not a manageable driver }
+        '404': { description: Driver not found }
+        '502': { description: 'Clerk failure, including an explicitly reported partial enable' }
+  /admin/drivers/{id}/reset-access:
+    post:
+      operationId: resetAdminDriverAccess
+      tags: [admin]
+      security: [{ clerkSession: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResetAdminDriverAccessInput' }
+      responses:
+        '200':
+          description: Password reset, account restored, and sessions revoked
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminDriverResponse' }
+        '400': { description: Invalid password }
+        '401': { description: Sign-in required }
+        '403': { description: Target is not a manageable driver }
+        '404': { description: Driver not found }
+        '502': { description: 'Clerk failure, including an explicitly reported partial reset' }
+  /driver/release-coaches:
+    post:
+      operationId: releaseDriverCoaches
+      tags: [driver]
+      security: [{ clerkSession: [] }]
+      responses:
+        "204":
+          description: Releases every coach owned by this driver before calling Clerk signOut
+        "401":
+          description: Driver sign-in required
+  /driver/profile:
+    get:
+      operationId: getDriverProfile
+      tags: [driver]
+      security: [{ clerkSession: [] }]
+      responses:
+        "200":
+          description: The signed-in driver's own profile, or null when onboarding is incomplete
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DriverProfileResponse' }
+        "401":
+          description: Driver sign-in required
+    put:
+      operationId: updateDriverProfile
+      tags: [driver]
+      security: [{ clerkSession: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DriverProfileInput' }
+      responses:
+        "200":
+          description: Saved profile
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DriverProfileResponse' }
+        "400":
+          description: Invalid profile
+        "401":
+          description: Driver sign-in required
+        "409":
+          description: Username already in use (case insensitive)
+  /driver/scheduled-trips:
+    get:
+      operationId: getDriverScheduledTrips
+      tags: [driver]
+      security: [{ clerkSession: [] }]
+      responses:
+        "200":
+          description: Active scheduled trips assigned to or selected by the signed-in driver
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DriverScheduledTripList' }
+        "401":
+          description: Driver sign-in required
+        "403":
+          description: Driver access or completed profile required
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HealthStatus" }
+  /passenger/pair:
+    post:
+      operationId: pairPassenger
+      tags: [passenger]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/PassengerPairRequest' } }
+      responses:
+        '200':
+          description: Paired passenger session and snapshot
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/PassengerPairResponse' } }
+  /passenger/snapshot:
+    post:
+      operationId: getPassengerSnapshot
+      tags: [passenger]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/PassengerSnapshotRequest' } }
+      responses:
+        '200':
+          description: Current passenger trip snapshot
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/PassengerSnapshotResponse' } }
+  /passenger/public-run/{runKey}:
+    get:
+      operationId: getPublicRunPassengerTrip
+      tags: [passenger]
+      parameters:
+        - name: runKey
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Current coach assignment and live trip for a published departure
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/PublicRunPassengerResponse' } }
+  /passenger/account/journeys:
+    get:
+      operationId: getPassengerAccountJourneys
+      tags: [passenger]
+      security: [{ clerkSession: [] }]
+      responses:
+        '200':
+          description: Saved journeys belonging to the signed-in Clerk account
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/PassengerAccountJourneysResponse' } }
+        '401': { description: Sign-in required }
+        '403': { description: Clerk session or account is not active }
+    post:
+      operationId: savePassengerAccountJourney
+      tags: [passenger]
+      security: [{ clerkSession: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/PassengerAccountJourneyInput' } }
+      responses:
+        '200':
+          description: Journey created or existing identical route returned
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/PassengerAccountJourneyResponse' } }
+        '400': { description: Invalid journey choice }
+        '401': { description: Sign-in required }
+        '403': { description: Clerk session or account is not active }
+        '409': { description: Account journey limit reached }
+  /passenger/account/journeys/{id}:
+    delete:
+      operationId: deletePassengerAccountJourney
+      tags: [passenger]
+      security: [{ clerkSession: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: Journey deleted }
+        '401': { description: Sign-in required }
+        '403': { description: Clerk session or account is not active }
+        '404': { description: Journey not found for this account }
+  /passenger-info:
+    get:
+      operationId: getPassengerInfo
+      tags: [passenger]
+      responses:
+        '200':
+          description: Reviewed passenger information in supported languages
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/PassengerInfoResponse' } }
+  /public-schedules/monsey-trails:
+    get:
+      operationId: getOfficialSchedule
+      tags: [passenger]
+      parameters:
+        - { name: line, in: query, required: true, schema: { type: number } }
+        - { name: origin, in: query, required: true, schema: { type: number } }
+        - { name: destination, in: query, required: true, schema: { type: number } }
+        - { name: date, in: query, required: true, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: Published runs for the selected route and date
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/OfficialSchedule' } }
+  /public-schedules/monsey-trails/journey:
+    post:
+      operationId: getPassengerJourney
+      tags: [passenger]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/PassengerJourneyRequest' } }
+      responses:
+        '200':
+          description: Date-bound published journey with traffic-adjusted stop estimates
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/PassengerJourney' } }
+        '400': { description: Invalid schedule selection }
+        '404': { description: Published run not found }
+        '422': { description: Published stop coordinates could not be verified }
+        '502': { description: Official schedule temporarily unavailable }
+  /public-schedules/monsey-trails/transfers:
+    post:
+      operationId: searchPassengerTransfers
+      tags: [passenger]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/PassengerTransferRequest' } }
+      responses:
+        '200':
+          description: Bounded possible transfers verified against exact published runs and shared stops
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/PassengerTransferSearchResponse' } }
+        '400': { description: Invalid transfer request }
+        '404': { description: Incoming published run not found }
+        '422': { description: Incoming run does not have enough verified stop data }
+        '502': { description: Official schedule temporarily unavailable }
+  /passenger/alerts:
+    put:
+      operationId: upsertPassengerAlert
+      tags: [passenger]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/PassengerAlertUpsertRequest' } }
+      responses:
+        '200':
+          description: Registered alert (push tokens are never returned)
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/PassengerAlertResponse' } }
+    delete:
+      operationId: leavePassengerAlert
+      tags: [passenger]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/PassengerAlertDeleteRequest' } }
+      responses:
+        '204': { description: Alert registration removed }
+  /passenger/realtime-subscriptions:
+    get:
+      operationId: listPassengerRealtimeSubscriptions
+      tags: [passenger]
+      parameters:
+        - { name: deviceId, in: query, required: true, schema: { type: string, maxLength: 160 } }
+        - { name: x-passenger-realtime-capability, in: header, required: true, schema: { type: string, minLength: 43, maxLength: 128 } }
+      responses:
+        '200':
+          description: Opt-in subscriptions owned by this installation; push credentials are never returned.
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/PassengerRealtimeSubscriptionListResponse' } }
+        '400': { description: Missing or invalid installation identity }
+    post:
+      operationId: createPassengerRealtimeSubscription
+      tags: [passenger]
+      parameters:
+        - { name: x-passenger-realtime-capability, in: header, required: true, schema: { type: string, minLength: 43, maxLength: 128 } }
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/PassengerRealtimeSubscriptionInput' } }
+      responses:
+        '201':
+          description: Created or returned the existing opt-in without rearming a consumed or cancelled subscription.
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/PassengerRealtimeSubscriptionResponse' } }
+        '400': { description: Invalid subscription or installation identity }
+        '409': { description: Passenger trip is inactive or the selected exact run/stop/connection is invalid }
+        '502': { description: Exact published run could not be verified }
+  /passenger/realtime-subscriptions/{id}:
+    put:
+      operationId: updatePassengerRealtimeSubscription
+      tags: [passenger]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: x-passenger-realtime-capability, in: header, required: true, schema: { type: string, minLength: 43, maxLength: 128 } }
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/PassengerRealtimeSubscriptionInput' } }
+      responses:
+        '200':
+          description: Explicitly re-armed or updated an owned subscription after revalidating the exact run and stop.
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/PassengerRealtimeSubscriptionResponse' } }
+        '404': { description: Subscription is not owned by this installation }
+        '409': { description: Selected exact run/stop/connection is invalid }
+        '502': { description: Exact published run could not be verified }
+    delete:
+      operationId: deletePassengerRealtimeSubscription
+      tags: [passenger]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: x-passenger-realtime-capability, in: header, required: true, schema: { type: string, minLength: 43, maxLength: 128 } }
+      responses:
+        '204': { description: Subscription cancelled and unsent pending events discarded }
+        '404': { description: Subscription is not owned by this installation }
+  /passenger/departure-reminders/push-public-key:
+    get:
+      operationId: getDepartureReminderPushPublicKey
+      tags: [passenger]
+      responses:
+        '200':
+          description: VAPID public key for browser background push
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/PushPublicKeyResponse' } }
+  /passenger/departure-reminders:
+    get:
+      operationId: listDepartureReminders
+      tags: [passenger]
+      parameters:
+        - in: header
+          name: x-departure-reminder-capability
+          required: true
+          description: Private high-entropy installation capability. Never include in a URL or logs.
+          schema: { type: string, minLength: 43, maxLength: 128, pattern: '^[A-Za-z0-9_-]+$' }
+        - in: query
+          name: deviceId
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 160 }
+      responses:
+        '200':
+          description: Device departure reminders
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/DepartureReminderListResponse' } }
+    post:
+      operationId: createDepartureReminder
+      tags: [passenger]
+      parameters:
+        - in: header
+          name: x-departure-reminder-capability
+          required: true
+          description: Private high-entropy installation capability.
+          schema: { type: string, minLength: 43, maxLength: 128, pattern: '^[A-Za-z0-9_-]+$' }
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/DepartureReminderInput' } }
+      responses:
+        '201':
+          description: Server-scheduled departure reminder
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/DepartureReminderResponse' } }
+        '409': { description: Selected trip is no longer published or has no matching recurring service }
+        '502': { description: Published schedule could not be verified }
+  /passenger/departure-reminders/{id}:
+    put:
+      operationId: updateDepartureReminder
+      tags: [passenger]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: header
+          name: x-departure-reminder-capability
+          required: true
+          description: Private high-entropy installation capability.
+          schema: { type: string, minLength: 43, maxLength: 128, pattern: '^[A-Za-z0-9_-]+$' }
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/DepartureReminderInput' } }
+      responses:
+        '200':
+          description: Updated and revalidated reminder
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/DepartureReminderResponse' } }
+        '404': { description: Reminder not found for device }
+        '409': { description: No matching published service }
+    delete:
+      operationId: cancelDepartureReminder
+      tags: [passenger]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: header
+          name: x-departure-reminder-capability
+          required: true
+          description: Private high-entropy installation capability.
+          schema: { type: string, minLength: 43, maxLength: 128, pattern: '^[A-Za-z0-9_-]+$' }
+      responses:
+        '204': { description: Reminder cancelled }
+        '404': { description: Reminder not found for device }
+
