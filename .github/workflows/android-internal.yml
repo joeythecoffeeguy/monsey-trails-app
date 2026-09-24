@@ -33,7 +33,7 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - uses: android-actions/setup-android@v3
+  
       - name: Check release configuration
         run: python3 artifacts/passenger-companion/scripts/android_release.py check
       - name: Install workspace dependencies
