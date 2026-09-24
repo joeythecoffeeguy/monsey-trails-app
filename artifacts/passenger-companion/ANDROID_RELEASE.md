@@ -9,12 +9,14 @@ uploads the `.aab` as a workflow artifact. It does **not** submit to Play.
 
 ## One-time owner setup in GitHub
 
-First add the workflow from this workspace's
-`.github/workflows/android-internal.yml` to the same path on `main` in
-`joeythecoffeeguy/monsey-trails-app`. The connected GitHub API refuses writes
-to `.github/workflows`, so this one file must be added using GitHub's web
-editor or a trusted local Git client. It is safe to publish: it contains no
-keys. The signing helper it calls is already in the public repository.
+First open the staged
+[`android-internal.yml`](https://github.com/joeythecoffeeguy/monsey-trails-app/blob/main/android-internal.yml)
+on GitHub. Click **Edit** (pencil), replace the filename at the top with
+`.github/workflows/android-internal.yml`, and **Commit changes** to `main`.
+GitHub will move it into the Actions folder; the root-level staging file
+should disappear. The connected GitHub API refuses writes to that special
+folder, so this one move requires your GitHub access. The workflow contains
+no keys. Its signing helper is already in the public repository.
 
 Then open the repository's **Settings → Secrets and variables → Actions**.
 Set these repository **secrets**:
