@@ -1,0 +1,57 @@
+name: Android internal-test bundle
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      CI: "1"
+      EXPO_PUBLIC_DOMAIN: coach-passenger-display.replit.app
+      EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ vars.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+      EXPO_PUBLIC_CLERK_PROXY_URL: ${{ vars.EXPO_PUBLIC_CLERK_PROXY_URL }}
+      ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
+      ANDROID_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_STORE_PASSWORD }}
+      ANDROID_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
+      ANDROID_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - name: Check release configuration
+        run: python3 artifacts/passenger-companion/scripts/android_release.py check
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Generate Android project
+        working-directory: artifacts/passenger-companion
+        run: pnpm exec expo prebuild --platform android --no-install
+      - name: Configure secure release signing
+        run: python3 artifacts/passenger-companion/scripts/android_release.py prepare
+      - name: Build app bundle
+        working-directory: artifacts/passenger-companion/android
+        run: ./gradlew --no-daemon :app:bundleRelease
+      - name: Verify package, version and signature
+        run: python3 artifacts/passenger-companion/scripts/android_release.py verify
+      - name: Upload verified Android bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: monsey-trails-passenger-internal-aab
+          path: artifacts/passenger-companion/android/app/build/outputs/bundle/release/*.aab
+          if-no-files-found: error
+          retention-days: 14
