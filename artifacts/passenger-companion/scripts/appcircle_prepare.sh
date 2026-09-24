@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run as an Appcircle Custom Script after Install Node, before Android Build.
+# Run as an Appcircle Custom Script after Git Clone, before Android Build.
 set -euo pipefail
 
 : "${AC_REPOSITORY_DIR:?Appcircle must clone the repository first}"
@@ -8,8 +8,9 @@ export EXPO_PUBLIC_DOMAIN="${EXPO_PUBLIC_DOMAIN:-coach-passenger-display.replit.
 export CI=1
 
 cd "$AC_REPOSITORY_DIR"
-corepack enable
-corepack prepare pnpm@10.26.1 --activate
+pnpm_tools="$(mktemp -d "${TMPDIR:-/tmp}/appcircle-pnpm.XXXXXX")"
+npm install --prefix "$pnpm_tools" --no-save --no-audit --no-fund pnpm@10.26.1
+export PATH="$pnpm_tools/node_modules/.bin:$PATH"
 pnpm install --frozen-lockfile
 
 cd artifacts/passenger-companion
