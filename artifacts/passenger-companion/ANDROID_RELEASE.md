@@ -17,10 +17,13 @@ from Expo at build time and the repository uses pnpm at its root.
    certificate for the existing app; a different certificate requires an
    approved upload-key reset, not a new Play app.
 2. In the profile's **Workflows**, edit the Android release workflow. Keep
-   **Git Clone** and **Install Node**. Disable the default **NPM/Yarn Commands**
+   **Git Clone** and **Install Node**. Appcircle's macOS pool has Node 22 by
+   default, so its existing **Custom Script** step immediately after Git Clone
+   can run before Install Node. Disable the default **NPM/Yarn Commands**
    install step; npm/yarn are not valid installers for this pnpm workspace.
-   Add a **Custom Script** step with **Execute With: Bash** after Install Node
-   and before **Android Build**:
+   Disable **Increment Build and Version Number** as well; the release version
+   code is explicitly set in `app.json`. Set the existing Custom Script to
+   **Execute With: Bash** and enter:
 
    ```sh
    bash "$AC_REPOSITORY_DIR/artifacts/passenger-companion/scripts/appcircle_prepare.sh"
