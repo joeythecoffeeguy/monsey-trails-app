@@ -70,6 +70,27 @@ def prepare() -> None:
     print("Release signing configured from GitHub Actions secrets")
 
 
+def remove_release_signing(source: str) -> str:
+    """Leave the Gradle release bundle unsigned for Appcircle's Android Sign step."""
+    start = source.index("    buildTypes {")
+    end = source.index("    packagingOptions {", start)
+    build_types = source[start:end]
+    debug = "            signingConfig signingConfigs.debug\n"
+    if build_types.count(debug) != 2 or build_types.count("        release {\n") != 1:
+        raise ValueError("Expo's generated Android signing configuration changed")
+    release_start = build_types.index("        release {\n")
+    release = build_types[release_start:]
+    if release.count(debug) != 1:
+        raise ValueError("Could not isolate release signing config")
+    build_types = build_types[:release_start] + release.replace(debug, "", 1)
+    return source[:start] + build_types + source[end:]
+
+
+def prepare_unsigned() -> None:
+    GRADLE.write_text(remove_release_signing(GRADLE.read_text()))
+    print("Unsigned release configured for Appcircle Android Sign")
+
+
 def verify() -> None:
     app = json.loads((APP / "app.json").read_text())["expo"]["android"]
     expected_id = "com.monseytrails.passenger"
@@ -109,9 +130,10 @@ def verify() -> None:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2 or sys.argv[1] not in ("check", "prepare", "verify"):
-        raise SystemExit("Usage: android_release.py check|prepare|verify")
+    if len(sys.argv) != 2 or sys.argv[1] not in ("check", "prepare", "prepare-unsigned", "verify"):
+        raise SystemExit("Usage: android_release.py check|prepare|prepare-unsigned|verify")
     try:
-        {"check": check_credentials, "prepare": prepare, "verify": verify}[sys.argv[1]]()
+        {"check": check_credentials, "prepare": prepare, "prepare-unsigned": prepare_unsigned,
+         "verify": verify}[sys.argv[1]]()
     except (ValueError, OSError, subprocess.CalledProcessError) as exc:
         raise SystemExit(f"Android release failed: {exc}") from None
