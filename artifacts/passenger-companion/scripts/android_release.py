@@ -13,6 +13,7 @@ from pathlib import Path
 
 APP = Path(__file__).resolve().parents[1]
 GRADLE = APP / "android/app/build.gradle"
+MANIFEST = APP / "android/app/src/main/AndroidManifest.xml"
 OUTPUT = APP / "android/app/build/outputs/bundle/release"
 
 
@@ -26,6 +27,7 @@ def required(name: str) -> str:
 def check_credentials() -> None:
     required("EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY")
     required("EXPO_PUBLIC_DOMAIN")
+    required("GOOGLE_MAPS_ANDROID_API_KEY")
     required("ANDROID_UPLOAD_STORE_PASSWORD")
     required("ANDROID_UPLOAD_KEY_ALIAS")
     required("ANDROID_UPLOAD_KEY_PASSWORD")
@@ -42,6 +44,15 @@ def prepare() -> None:
     # Do not interpolate any secret into build.gradle: Gradle reads them from
     # the runner's environment, and android/ is generated and gitignored.
     source = GRADLE.read_text()
+    default_config = "    defaultConfig {\n"
+    if source.count(default_config) != 1:
+        raise ValueError("Expo's generated Android default configuration changed")
+    source = source.replace(
+        default_config,
+        default_config
+        + "        manifestPlaceholders = [googleMapsApiKey: System.getenv('GOOGLE_MAPS_ANDROID_API_KEY')]\n",
+        1,
+    )
     debug = "signingConfig signingConfigs.debug"
     if source.count(debug) != 2 or source.count("    signingConfigs {") != 1:
         raise ValueError("Expo's generated Android signing configuration changed")
@@ -64,7 +75,17 @@ def prepare() -> None:
     )
     if source.count(debug) != 1 or source.count("signingConfig signingConfigs.release") != 1:
         raise ValueError("Could not replace release signing config safely")
+    manifest = MANIFEST.read_text()
+    application = re.search(r"<application\b[^>]*>", manifest, re.DOTALL)
+    if not application or "com.google.android.geo.API_KEY" in manifest:
+        raise ValueError("Could not safely configure the Android Maps API key")
+    manifest = (
+        manifest[:application.end()]
+        + '\n    <meta-data android:name="com.google.android.geo.API_KEY" android:value="${googleMapsApiKey}" />'
+        + manifest[application.end():]
+    )
     GRADLE.write_text(source)
+    MANIFEST.write_text(manifest)
     with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
         env.write(f"ANDROID_UPLOAD_KEYSTORE_FILE={target}\n")
     print("Release signing configured from GitHub Actions secrets")
@@ -113,10 +134,20 @@ def verify_generated_identity(app: dict, expected_id: str) -> None:
     print("Bundle metadata absent; checked generated Android application ID and version code")
 
 
+def verify_google_maps_configuration() -> None:
+    source = GRADLE.read_text()
+    if (
+        "manifestPlaceholders = [googleMapsApiKey: System.getenv('GOOGLE_MAPS_ANDROID_API_KEY')]" not in source
+        or 'android:name="com.google.android.geo.API_KEY" android:value="${googleMapsApiKey}"' not in MANIFEST.read_text()
+    ):
+        raise ValueError("Android Maps API key is not configured in the release")
+
+
 def verify() -> None:
     app = json.loads((APP / "app.json").read_text())["expo"]["android"]
     expected_id = "com.monseytrails.passenger"
     verify_generated_identity(app, expected_id)
+    verify_google_maps_configuration()
     bundles = list(OUTPUT.glob("*.aab"))
     if len(bundles) != 1:
         raise ValueError(f"Expected one app bundle, found {len(bundles)}")
