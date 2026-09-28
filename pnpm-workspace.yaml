@@ -40,6 +40,11 @@ packages:
   - lib/integrations/*
   - scripts
 
+# EAS invokes the pre-install hook with `pnpm run` before installing deps.
+# pnpm 11 otherwise starts an implicit install here, before that hook can
+# select the workspace's pnpm 10 version. The explicit install remains checked.
+verifyDepsBeforeRun: false
+
 autoInstallPeers: false
 
 catalog:
