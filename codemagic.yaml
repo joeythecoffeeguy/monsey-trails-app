@@ -1,1 +1,56 @@
-
+# Manual passenger Android release build. No automatic builds or store publishing.
+# In Codemagic > Environment variables, populate passenger_android_release with:
+# EXPO_PUBLIC_DOMAIN, EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY,
+# GOOGLE_MAPS_ANDROID_API_KEY, ANDROID_UPLOAD_KEYSTORE_BASE64,
+# ANDROID_UPLOAD_STORE_PASSWORD, ANDROID_UPLOAD_KEY_ALIAS,
+# ANDROID_UPLOAD_KEY_PASSWORD.
+# EXPO_PUBLIC_CLERK_PROXY_URL is optional if your Clerk setup uses a proxy.
+# Keep signing credentials and the Maps key marked Secret; never commit them.
+workflows:
+  passenger-android-release:
+    name: Monsey Trails Passenger - Android release
+    instance_type: linux_x2
+    max_build_duration: 90
+    environment:
+      node: 22
+      java: 17
+      groups:
+        - passenger_android_release
+      vars:
+        CI: "1"
+    scripts:
+      - name: Check release configuration
+        script: |
+          set -eu
+          python3 artifacts/passenger-companion/scripts/android_release.py check
+      - name: Install workspace dependencies
+        script: |
+          set -eu
+          npm install --global pnpm@10.26.1
+          pnpm install --frozen-lockfile
+      - name: Generate Android project
+        script: |
+          set -eu
+          cd artifacts/passenger-companion
+          pnpm exec expo prebuild --platform android --no-install
+      - name: Configure secure release signing
+        script: |
+          set -eu
+          # Reuse the repository's release helper with Codemagic's env-file path.
+          export RUNNER_TEMP="$CM_BUILD_DIR/.codemagic-private"
+          mkdir -p "$RUNNER_TEMP"
+          chmod 700 "$RUNNER_TEMP"
+          export GITHUB_ENV="$CM_ENV"
+          python3 artifacts/passenger-companion/scripts/android_release.py prepare
+      - name: Build Android app bundle
+        script: |
+          set -eu
+          cd artifacts/passenger-companion/android
+          chmod +x gradlew
+          ./gradlew --no-daemon :app:bundleRelease
+      - name: Verify package, version and signing certificate
+        script: |
+          set -eu
+          python3 artifacts/passenger-companion/scripts/android_release.py verify
+    artifacts:
+      - artifacts/passenger-companion/android/app/build/outputs/bundle/release/*.aab
